@@ -23,6 +23,12 @@ RUN apt-get update && \
 
 RUN pip install tornado==3.2.2
 
+RUN mkdir -p /root/crawlout/trunk
+RUN mkdir -p /root/crawlout/0.19
+
+RUN mkdir -p /data/rcs
+RUN mkdir -p /data/shared
+RUN mkdir -p /data/webserver/game_data
 WORKDIR /root
 RUN git clone https://github.com/crawl/crawl.git
 
@@ -30,25 +36,25 @@ WORKDIR /root/crawl
 RUN git submodule update --init
 
 WORKDIR /root/crawl/crawl-ref/source
-RUN make WEBTILES=y USE_DGAMELAUNCH=y SAVEDIR=/data/
-RUN mkdir rcs
+RUN make WEBTILES=y SAVEDIR=/data/trunk SHAREDDIR=/data/shared WEBDIR=/data/webserver/game_data
 
-# Need to have structured dirs for various versions and copy binary etc
-#RUN git fetch
+RUN cp crawl /root/crawlout/trunk
+
 #RUN git checkout stone_soup-0.19
-#RUN make WEBTILES=y USE_DGAMELAUNCH=y SAVEDIR=/data/
-#RUN mkdir rcs
+#WORKDIR /root/crawl
+#RUN git submodule update --init
+#WORKDIR /root/crawl/crawl-ref/source
+#RUN make WEBTILES=y SAVEDIR=/data/0.19 SHARDDIR=/data/shared WEBDIR=/data/webdir
+#RUN cp crawl /root/crawlout/0.19
+#RUN cp webserver /root/crawlout/0.19
 
-WORKDIR /root/crawl/crawl-ref/source/webserver
-RUN sed -i '/bind_port/ s|8080|80|' config.py
-RUN sed -i '/password_db/ s|./webserver/passwd.db3|/data/passwd.db3|' config.py
-RUN sed -i '/filename/ s|#||' config.py
-RUN sed -i '/filename/ s|webtiles.log|/data/webtiles.log|' config.py
-# RUN sed -i '/crypt_algorithm/ s|broken|6|' config.py
-# RUN sed -i '/crypt_salt_length/ s|16|16|' config.py
+# URL you are serving on
+RUN sed -i '/player_url/ s|None|http://192.168.99.100:8080|' /root/crawl/crawl-ref/source/webserver/config.py
 
-WORKDIR /root/crawl/crawl-ref/source
-CMD python webserver/server.py
+
+#RUN git checkout master
+WORKDIR /root/crawlout
+CMD python /root/crawl/crawl-ref/source/webserver/server.py
 
 VOLUME ["/data"]
 EXPOSE 80 443
