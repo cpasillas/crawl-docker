@@ -1,5 +1,4 @@
-FROM dockerfile/python
-MAINTAINER dididi <dfdgsdfg@gmail.com>
+FROM python:2
 
 ENV HOME /root
 ENV LC_ALL C.UTF-8
@@ -25,14 +24,20 @@ RUN apt-get update && \
 RUN pip install tornado==3.2.2
 
 WORKDIR /root
-RUN git clone git://gitorious.org/crawl/crawl.git
+RUN git clone https://github.com/crawl/crawl.git
 
 WORKDIR /root/crawl
 RUN git submodule update --init
 
 WORKDIR /root/crawl/crawl-ref/source
-RUN make WEBTILES=y USE_DGAMELAUNCH=y
+RUN make WEBTILES=y USE_DGAMELAUNCH=y SAVEDIR=/data/
 RUN mkdir rcs
+
+# Need to have structured dirs for various versions and copy binary etc
+#RUN git fetch
+#RUN git checkout stone_soup-0.19
+#RUN make WEBTILES=y USE_DGAMELAUNCH=y SAVEDIR=/data/
+#RUN mkdir rcs
 
 WORKDIR /root/crawl/crawl-ref/source/webserver
 RUN sed -i '/bind_port/ s|8080|80|' config.py
