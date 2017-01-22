@@ -23,38 +23,49 @@ RUN apt-get update && \
 
 RUN pip install tornado==3.2.2
 
-RUN mkdir -p /root/crawlout/trunk
-RUN mkdir -p /root/crawlout/0.19
+RUN mkdir /data
 
-RUN mkdir -p /data/rcs
-RUN mkdir -p /data/shared
-RUN mkdir -p /data/webserver/game_data
 WORKDIR /root
+# Crawl code for compilation
 RUN git clone https://github.com/crawl/crawl.git
 
+# Build Crawl Versions
+RUN mkdir -p /root/crawlout/trunk
 WORKDIR /root/crawl
 RUN git submodule update --init
 
+# Build Trunk
 WORKDIR /root/crawl/crawl-ref/source
-RUN make WEBTILES=y SAVEDIR=/data/trunk SHAREDDIR=/data/shared WEBDIR=/data/webserver/game_data
-
+RUN make -j 4 WEBTILES=y SAVEDIR=/data/saves/trunk
 RUN cp crawl /root/crawlout/trunk
+RUN cp -R dat /root/crawlout/trunk
 
-#RUN git checkout stone_soup-0.19
-#WORKDIR /root/crawl
-#RUN git submodule update --init
-#WORKDIR /root/crawl/crawl-ref/source
-#RUN make WEBTILES=y SAVEDIR=/data/0.19 SHARDDIR=/data/shared WEBDIR=/data/webdir
-#RUN cp crawl /root/crawlout/0.19
-#RUN cp webserver /root/crawlout/0.19
+# Build 0.19
+RUN mkdir -p /root/crawlout/0.19
+WORKDIR /root/crawl
+RUN git checkout stone_soup-0.19
+RUN git submodule update --init
+WORKDIR /root/crawl/crawl-ref/source
+RUN make WEBTILES=y SAVEDIR=/data/saves/0.19 
+RUN cp crawl /root/crawlout/0.19
+RUN cp -R dat /root/crawlout/0.19
 
-# URL you are serving on
-RUN sed -i '/player_url/ s|None|http://192.168.99.100:8080|' /root/crawl/crawl-ref/source/webserver/config.py
+# Switch back to master for running the webserver later
+RUN git checkout master
 
-
-#RUN git checkout master
-WORKDIR /root/crawlout
-CMD python /root/crawl/crawl-ref/source/webserver/server.py
+WORKDIR /root
+RUN apt-get update
+RUN apt-get install -y vim
+ARG CACHE_DATE=2017-01-20
+# Personal crawl config.py for webserver
+RUN git clone https://github.com/cpasillas/crawl-web-config.git
+# Copy personal config into crawl source dir for running web server
+RUN cp /root/crawl-web-config/config.py /root/crawl/crawl-ref/source/webserver/config.py
+RUN cp /root/crawl-web-config/webtiles-init-player.sh /root/crawl/crawl-ref/source/util/webtiles-init-player.sh
+# URL you are serving on, changeable here for development purposes
+RUN sed -i '/player_url/ s|None|"http://192.168.99.100:8080"|' /root/crawl/crawl-ref/source/webserver/config.py
+WORKDIR /root/crawl/crawl-ref/source
+CMD python ./webserver/server.py
 
 VOLUME ["/data"]
 EXPOSE 80 443
