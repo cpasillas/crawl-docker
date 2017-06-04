@@ -46,16 +46,31 @@ WORKDIR /root/crawl
 RUN git checkout stone_soup-0.19
 RUN git submodule update --init
 WORKDIR /root/crawl/crawl-ref/source
-RUN make WEBTILES=y SAVEDIR=/data/saves/0.19 
+RUN make -j 4 WEBTILES=y SAVEDIR=/data/saves/0.19 
 RUN cp crawl /root/crawlout/0.19
 RUN cp -R dat /root/crawlout/0.19
 
+# Build Manta
+WORKDIR /root
+RUN mkdir manta
+WORKDIR /root/manta
+RUN git clone https://github.com/cpasillas/crawl.git
+RUN mkdir -p /root/crawlout/manta
+WORKDIR /root/manta/crawl
+RUN git submodule update --init
+WORKDIR /root/manta/crawl/crawl-ref/source
+RUN make -j 4 WEBTILES=y SAVEDIR=/data/saves/manta
+RUN cp crawl /root/crawlout/manta
+RUN cp -R dat /root/crawlout/manta
+
 # Switch back to master for running the webserver later
+WORKDIR /root/crawl
 RUN git checkout master
 
 WORKDIR /root
 RUN apt-get update
 RUN apt-get install -y vim
+RUN apt-get install -y less
 ARG CACHE_DATE=2017-01-20
 # Personal crawl config.py for webserver
 RUN git clone https://github.com/cpasillas/crawl-web-config.git
