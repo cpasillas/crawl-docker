@@ -1,8 +1,8 @@
 FROM python:2
 
-ENV HOME /root
 ENV LC_ALL C.UTF-8
 
+# Installing crawl deps
 RUN apt-get update && \
     apt-get -y install apt-utils \
                        build-essential \
@@ -22,105 +22,81 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-RUN pip install tornado==3.2.2
-
-RUN mkdir /data
-
-# Crawl code for compilation
-WORKDIR /root
-RUN git clone https://github.com/crawl/crawl.git
-
-# Build Main Fork Crawl Versions
-
-# Build Trunk
-#WORKDIR /root/crawl
-#RUN git submodule update --init
-#RUN mkdir -p /root/crawlout/trunk
-#WORKDIR /root/crawl/crawl-ref/source
-#RUN make -j 4 WEBTILES=y SAVEDIR=/data/saves/trunk
-#RUN cp crawl /root/crawlout/trunk
-#RUN cp -R dat /root/crawlout/trunk
-
-# Build 0.19
-RUN mkdir -p /root/crawlout/0.19
-WORKDIR /root/crawl
-RUN git checkout stone_soup-0.19
-RUN git submodule update --init
-WORKDIR /root/crawl/crawl-ref/source
-RUN make -j 4 WEBTILES=y SAVEDIR=/data/saves/0.19 
-RUN cp crawl /root/crawlout/0.19
-RUN cp -R dat /root/crawlout/0.19
-
-# Build 0.20
-RUN mkdir -p /root/crawlout/0.20
-WORKDIR /root/crawl
-RUN git checkout stone_soup-0.20
-RUN git submodule update --init
-WORKDIR /root/crawl/crawl-ref/source
-RUN make -j 4 WEBTILES=y SAVEDIR=/data/saves/0.20 
-RUN cp crawl /root/crawlout/0.20
-RUN cp -R dat /root/crawlout/0.20
-
-# Crawl code for special versions
-WORKDIR /root
-RUN mkdir customcrawl
-WORKDIR /root/customcrawl
-RUN git clone https://github.com/cpasillas/crawl.git
-
-
-# Build Manta
-RUN mkdir -p /root/crawlout/manta
-WORKDIR /root/customcrawl/crawl
-RUN git checkout manta
-RUN git submodule update --init
-WORKDIR /root/customcrawl/crawl/crawl-ref/source
-RUN make -j 4 WEBTILES=y SAVEDIR=/data/saves/manta
-RUN cp crawl /root/crawlout/manta
-RUN cp -R dat /root/crawlout/manta
-
-
-
-# Build Turkey
-RUN mkdir -p /root/crawlout/turkey
-WORKDIR /root/customcrawl/crawl
-RUN git checkout turkey
-RUN git submodule update --init
-WORKDIR /root/customcrawl/crawl/crawl-ref/source
-RUN make -j 4 WEBTILES=y SAVEDIR=/data/saves/turkey
-RUN cp crawl /root/crawlout/turkey
-RUN cp -R dat /root/crawlout/turkey
-
-
-WORKDIR /root
+# Installing utility programs
 RUN apt-get update
 RUN apt-get install -y vim
 RUN apt-get install -y less
 
+# Installing tornado webserver
+RUN pip install tornado==3.2.2
+
+# Setting directory path variables
+ENV ROOTDIR /root
+ENV CRAWL_OUT_DIR ${ROOTDIR}/crawlout
+ENV CRAWL_ROOT_DIR ${ROOTDIR}/crawl
+ENV CRAWL_SRC_DIR ${CRAWL_ROOT_DIR}/crawl-ref/source
+ENV CRAWL_BUILD_SCRIPT ${ROOTDIR}/build_crawl.sh
+
+ENV DOCKERDATADIR /data
+ENV SAVEDIR ${DOCKERDATADIR}/saves
+
+RUN mkdir ${DOCKERDATADIR}
+
+ADD build_crawl.sh ${CRAWL_BUILD_SCRIPT}
+RUN chmod 777 ${CRAWL_BUILD_SCRIPT}
+
+
 # Movable line to dirty docker cache.
 ARG CACHE_DATE=2017-01-20
 
-# Personal crawl config.py for webserver
+
+# Cloning cpasillas fork for Crawl special versions
+WORKDIR ${ROOTDIR}
+RUN git clone https://github.com/cpasillas/crawl.git
+
+# Building turkey
+WORKDIR ${CRAWL_ROOT_DIR}
+RUN ${CRAWL_BUILD_SCRIPT} turkey-0.20 ${CRAWL_OUT_DIR}/turkey-0.20 ${SAVEDIR}/turkey-0.20
+
+ENV SERVER_DIR ${CRAWL_OUT_DIR}/webserver
+# "Copying over turkey's webserver to ${SERVER_DIR}"
+WORKDIR ${CRAWL_SRC_DIR}
+RUN cp -R webserver ${SERVER_DIR}
+
+# Deleting source for special Crawl versions at ${CRAWL_ROOT_DIR}/*
+RUN rm -rf ${CRAWL_ROOT_DIR}/*
+
+# Cloning crawl config.py base for webserver
+WORKDIR ${ROOTDIR}
 RUN git clone https://github.com/cpasillas/crawl-web-config.git
 
-# Copy personal config into crawl source dir for running web server
-RUN cp /root/crawl-web-config/config.py /root/crawl/crawl-ref/source/webserver/config.py
-RUN cp /root/crawl-web-config/webtiles-init-player.sh /root/crawl/crawl-ref/source/util/webtiles-init-player.sh
-#RUN cp /root/crawl-web-config/config.py /root/customcrawl/crawl/crawl-ref/source/webserver/config.py
-#RUN cp /root/crawl-web-config/webtiles-init-player.sh /root/customcrawl/crawl/crawl-ref/source/util/webtiles-init-player.sh
+ENV WEB_CONFIG ${SERVER_DIR}/config.py
+# Copying personal config into crawl source dir for running web server
+RUN cp /root/crawl-web-config/config.py ${WEB_CONFIG}
+# String replacing important directories in config.py:
+# "{{root_data_dir}} -> ${DOCKERDATADIR}"
+# "{{root_binary_dir}} -> ${CRAWL_OUT_DIR}"
+# "{{root_webserver_dir}} -> ${SERVER_DIR}"
+# "{{util_dir}} -> ${SERVER_DIR}"
+RUN sed -i "s:{{root_data_dir}}:${DOCKERDATADIR}:" ${WEB_CONFIG}
+RUN sed -i "s:{{root_binary_dir}}:${CRAWL_OUT_DIR}:" ${WEB_CONFIG}
+RUN sed -i "s:{{root_webserver_dir}}:${SERVER_DIR}:" ${WEB_CONFIG}
+RUN sed -i "s:{{util_dir}}:${SERVER_DIR}:" ${WEB_CONFIG}
 
-# URL you are serving on, changeable here for development purposes
-RUN sed -i '/player_url/ s|None|"http://localhost"|' /root/crawl/crawl-ref/source/webserver/config.py
-#RUN sed -i '/player_url/ s|None|"http://localhost"|' /root/customcrawl/crawl/crawl-ref/source/webserver/config.py
+# "Copying custom start script to webserver dir (specified as util_dir above)"
+ENV WEB_INIT_SCRIPT ${SERVER_DIR}/webtiles-init-player.sh
+RUN cp /root/crawl-web-config/webtiles-init-player.sh ${WEB_INIT_SCRIPT}
+RUN chmod 755 ${WEB_INIT_SCRIPT}
+# "String replacing important directory in webtile-init-player.sh"
+# "{{data_root}} -> ${DOCKERDATADIR}"
+RUN sed -i "s:{{data_root}}:${DOCKERDATADIR}:" ${WEB_INIT_SCRIPT}
 
-WORKDIR /root/crawl/crawl-ref/source
-#WORKDIR /root/customcrawl/crawl/crawl-ref/source
+# "Setting another thing that I don't know what it does yet"
+RUN sed -i '/player_url/ s|None|"http://localhost"|' ${WEB_CONFIG}
 
-# Select branch for webserver.
-#RUN git checkout turkey
-#RUN git checkout master
-RUN git checkout stone_soup-0.20
-CMD python ./webserver/server.py
+WORKDIR ${SERVER_DIR}
+# "Hang on to your butts..."
+CMD python server.py
 
 VOLUME ["/data"]
 EXPOSE 80 443
-
